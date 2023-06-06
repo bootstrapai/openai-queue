@@ -1,6 +1,6 @@
 {
     "name": "openai-queue",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "",
     "main": "dist/index.js",
     "scripts": {
@@ -37,6 +37,7 @@
     "types": "dist/index.d.ts",
     "dependencies": {
         "gpt-tokens": "^1.0.7",
-        "openai": "^3.2.1"
+        "openai": "^3.2.1",
+        "openai-queue": "https://github.com/bootstrapai/openai-queue"
     }
 }

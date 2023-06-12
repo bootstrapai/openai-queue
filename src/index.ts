@@ -4,6 +4,7 @@ import {
 } from "openai";
 import { supportModelType } from "gpt-tokens";
 import { ModelAPIQueue } from "./queue";
+import { RequestCache } from "./cache";
 /**
  * Configuration object for each model queue. Specifies the rate limits for requests and tokens.
  * @interface QueueConfig
@@ -62,6 +63,7 @@ const defaultModelConfigs: Record<string, QueueConfig> = {
 export class APIQueue {
     private apiKey: string;
     private queues: Record<string, ModelAPIQueue>;
+    private cache: RequestCache;
 
     constructor(
         apiKey: string,
@@ -69,6 +71,7 @@ export class APIQueue {
     ) {
         this.apiKey = apiKey;
         this.queues = {};
+        this.cache = new RequestCache();
 
         const modelConfigs = { ...defaultModelConfigs, ...customModelConfigs };
 
@@ -96,7 +99,17 @@ export class APIQueue {
             throw new Error(`Unsupported model: ${request.model}`);
         }
 
-        return await modelQueue.request(request);
+        const cachehit = this.cache.getCache(request);
+        if (cachehit) {
+            return cachehit as CreateChatCompletionResponse;
+        }
+
+        const response = await modelQueue.request(request);
+        if (response) {
+            this.cache.setCache(request, response);
+        }
+
+        return response;
     }
 }
 

@@ -16,6 +16,7 @@ interface QueueConfig {
 export declare class APIQueue {
     private apiKey;
     private queues;
+    private cache;
     constructor(apiKey: string, customModelConfigs?: Record<string, QueueConfig>);
     /**
      * Make a request. This function will dispatch the request to the appropriate queue

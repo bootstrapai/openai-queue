@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.APIQueue = void 0;
 const queue_1 = require("./queue");
+const cache_1 = require("./cache");
 /**
  * Default rate limits for each model.
  *
@@ -58,6 +59,7 @@ class APIQueue {
     constructor(apiKey, customModelConfigs = {}) {
         this.apiKey = apiKey;
         this.queues = {};
+        this.cache = new cache_1.RequestCache();
         const modelConfigs = Object.assign(Object.assign({}, defaultModelConfigs), customModelConfigs);
         for (const [model, config] of Object.entries(modelConfigs)) {
             this.queues[model] = new queue_1.ModelAPIQueue(config.tokensPerMinute, config.requestsPerMinute, model, this.apiKey);
@@ -75,7 +77,15 @@ class APIQueue {
             if (!modelQueue) {
                 throw new Error(`Unsupported model: ${request.model}`);
             }
-            return yield modelQueue.request(request);
+            const cachehit = this.cache.getCache(request);
+            if (cachehit) {
+                return cachehit;
+            }
+            const response = yield modelQueue.request(request);
+            if (response) {
+                this.cache.setCache(request, response);
+            }
+            return response;
         });
     }
 }

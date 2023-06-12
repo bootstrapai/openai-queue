@@ -29,7 +29,7 @@ export class RequestCache {
         Object.keys(obj)
             .sort()
             .forEach((key) => {
-                //@ts-ignore
+                // @ts-ignore
                 sortedObj[key] = this.sortObjectKeys(obj[key]);
             });
 

@@ -90,7 +90,7 @@ export class APIQueue {
      */
     public async request(
         request: CreateChatCompletionRequest
-    ): Promise<CreateChatCompletionResponse> {
+    ): Promise<CreateChatCompletionResponse | null> {
         const modelQueue = this.queues[request.model];
         if (!modelQueue) {
             throw new Error(`Unsupported model: ${request.model}`);

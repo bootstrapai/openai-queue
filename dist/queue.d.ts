@@ -48,5 +48,5 @@ export declare class ModelAPIQueue {
      * @param {CreateChatCompletionRequest} request - The request for the API call.
      * @return {Promise<CreateChatCompletionResponse>} A promise that resolves with the result of the API call.
      */
-    request(request: CreateChatCompletionRequest): Promise<CreateChatCompletionResponse>;
+    request(request: CreateChatCompletionRequest): Promise<CreateChatCompletionResponse | null>;
 }

@@ -87,10 +87,9 @@ class ModelAPIQueue {
             const backoffTime = 10000; // Set backoff time to 10 seconds, adjust as needed
             let attemptCount = 0;
             const maxAttempts = 5; // Set max attempts to 5, adjust as needed
-            let result;
             while (attemptCount < maxAttempts) {
                 try {
-                    const completion = yield this.openai.createCompletion(request);
+                    const completion = yield this.openai.createChatCompletion(request);
                     const usedTokens = completion.data.usage.completion_tokens;
                     if (request.max_tokens) {
                         const multiplier = request.n ? request.n : 1;
@@ -102,7 +101,7 @@ class ModelAPIQueue {
                     else {
                         this.availableTokens -= usedTokens;
                     }
-                    result = completion.data;
+                    return completion.data;
                 }
                 catch (error) {
                     console.error(`API call failed with error: ${error.message}`);
@@ -117,7 +116,7 @@ class ModelAPIQueue {
                     }
                 }
             }
-            return result;
+            return null;
         });
     }
     /**

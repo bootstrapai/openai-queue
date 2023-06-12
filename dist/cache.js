@@ -19,7 +19,7 @@ class RequestCache {
             return obj;
         }
         if (Array.isArray(obj)) {
-            return obj.map(this.sortObjectKeys);
+            return obj.map(this.sortObjectKeys.bind(this));
         }
         const sortedObj = {};
         Object.keys(obj)

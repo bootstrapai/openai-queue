@@ -22,7 +22,7 @@ export class RequestCache {
         }
 
         if (Array.isArray(obj)) {
-            return obj.map(this.sortObjectKeys);
+            return obj.map(this.sortObjectKeys.bind(this));
         }
 
         const sortedObj: { [key: string]: any } = {};

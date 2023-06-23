@@ -110,30 +110,60 @@ export class ModelAPIQueue {
      */
     private async callAPI(
         request: CreateChatCompletionRequest
+    ): Promise<CreateChatCompletionResponse> {
+        const completion = await this.openai.createChatCompletion(request);
+        const usedTokens = completion.data.usage!.completion_tokens;
+
+        if (request.max_tokens) {
+            const multiplier = request.n ? request.n : 1;
+            const expectedTokens = request.max_tokens * multiplier;
+
+            if (expectedTokens > usedTokens) {
+                this.availableTokens += expectedTokens - usedTokens;
+            }
+        } else {
+            this.availableTokens -= usedTokens;
+        }
+
+        return completion.data;
+    }
+
+    /**
+     * Make a request. This function will wait for enough tokens and requests to be available before making the API call.
+     * If an API call fails, it will wait for enough tokens and requests to be available before retrying.
+     * @param {CreateChatCompletionRequest} request - The request for the API call.
+     * @return {Promise<CreateChatCompletionResponse>} A promise that resolves with the result of the API call.
+     */
+    public async request(
+        request: CreateChatCompletionRequest
     ): Promise<CreateChatCompletionResponse | null> {
         const backoffTime = 10000; // Set backoff time to 10 seconds, adjust as needed
         let attemptCount = 0;
         const maxAttempts = 5; // Set max attempts to 5, adjust as needed
+        const tokensNeeded = this.computeTokens(request);
+        console.log("tokensNeeded", tokensNeeded);
 
         while (attemptCount < maxAttempts) {
-            try {
-                const completion = await this.openai.createChatCompletion(
-                    request
+            while (
+                tokensNeeded > this.availableTokens ||
+                this.availableRequests <= 0
+            ) {
+                this.refillTokensAndRequests();
+                console.log(tokensNeeded, this.availableTokens);
+                const timeToSleep = Math.max(
+                    ((tokensNeeded - this.availableTokens) /
+                        this.tokensPerMinute) *
+                        60000,
+                    (1 / this.requestsPerMinute) * 60000
                 );
-                const usedTokens = completion.data.usage!.completion_tokens;
+                await this.sleep(timeToSleep);
+            }
 
-                if (request.max_tokens) {
-                    const multiplier = request.n ? request.n : 1;
-                    const expectedTokens = request.max_tokens * multiplier;
+            this.availableTokens -= tokensNeeded;
+            this.availableRequests -= 1;
 
-                    if (expectedTokens > usedTokens) {
-                        this.availableTokens += expectedTokens - usedTokens;
-                    }
-                } else {
-                    this.availableTokens -= usedTokens;
-                }
-
-                return completion.data;
+            try {
+                return await this.callAPI(request);
             } catch (error) {
                 console.error(
                     `API call failed with error: ${(error as Error).message}`
@@ -154,35 +184,5 @@ export class ModelAPIQueue {
         }
 
         return null;
-    }
-
-    /**
-     * Make a request. This function will wait for enough tokens and requests to be available before making the API call.
-     * @param {CreateChatCompletionRequest} request - The request for the API call.
-     * @return {Promise<CreateChatCompletionResponse>} A promise that resolves with the result of the API call.
-     */
-    public async request(
-        request: CreateChatCompletionRequest
-    ): Promise<CreateChatCompletionResponse | null> {
-        const tokensNeeded = this.computeTokens(request);
-        console.log("tokensNeeded", tokensNeeded);
-        while (
-            tokensNeeded > this.availableTokens ||
-            this.availableRequests <= 0
-        ) {
-            this.refillTokensAndRequests();
-            console.log(tokensNeeded, this.availableTokens);
-            const timeToSleep = Math.max(
-                ((tokensNeeded - this.availableTokens) / this.tokensPerMinute) *
-                    60000,
-                (1 / this.requestsPerMinute) * 60000
-            );
-            await this.sleep(timeToSleep);
-        }
-
-        this.availableTokens -= tokensNeeded;
-        this.availableRequests -= 1;
-
-        return await this.callAPI(request);
     }
 }

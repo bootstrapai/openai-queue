@@ -66,7 +66,6 @@ export class ModelAPIQueue {
         const tokensToAdd = Math.floor(
             (timeElapsed / 60000) * this.tokensPerMinute
         );
-        console.log("tokensToAdd", tokensToAdd);
         if (tokensToAdd > 0) {
             this.availableTokens = Math.min(
                 this.availableTokens + tokensToAdd,
@@ -141,7 +140,6 @@ export class ModelAPIQueue {
         let attemptCount = 0;
         const maxAttempts = 5; // Set max attempts to 5, adjust as needed
         const tokensNeeded = this.computeTokens(request);
-        console.log("tokensNeeded", tokensNeeded);
 
         while (attemptCount < maxAttempts) {
             while (
@@ -149,7 +147,6 @@ export class ModelAPIQueue {
                 this.availableRequests <= 0
             ) {
                 this.refillTokensAndRequests();
-                console.log(tokensNeeded, this.availableTokens);
                 const timeToSleep = Math.max(
                     ((tokensNeeded - this.availableTokens) /
                         this.tokensPerMinute) *

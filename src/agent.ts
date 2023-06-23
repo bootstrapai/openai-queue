@@ -4,6 +4,7 @@ import {
     CreateChatCompletionResponse,
     ChatCompletionRequestMessageRoleEnum,
 } from "openai";
+import * as _ from "lodash";
 import APIQueue from "./";
 
 interface Message {
@@ -39,7 +40,7 @@ export default class Agent {
                     return target[prop];
                 } else {
                     // @ts-ignore
-                    return typeof instance[prop] == "function"
+                    return typeof instance[prop] === "function"
                         ? // @ts-ignore
                           instance[prop].bind(instance)
                         : // @ts-ignore
@@ -89,7 +90,7 @@ export default class Agent {
 
     get messages(): CreateChatCompletionRequest["messages"] {
         let currentUUID = this._head;
-        let messages: CreateChatCompletionRequest["messages"] = [];
+        const messages: CreateChatCompletionRequest["messages"] = [];
 
         while (currentUUID !== null) {
             const { content, role } = Agent._dag.get(currentUUID)!;
@@ -110,25 +111,26 @@ export default class Agent {
     }
 
     public async chat(content: string): Promise<ProxiedAgent> {
-        const uuid: string = this._createMessage(content, "user");
+        const uuid: string = this.createMessage(content, "user");
+        this._head = uuid;
         const apiResponse: string = await this.callApi(this.messages);
-        const assistantUuid: string = this._createMessage(
+        const assistantUuid: string = this.createMessage(
             apiResponse,
             "assistant",
             uuid
         );
-        return this._createNewAgent(assistantUuid);
+        return this.createNewAgent(assistantUuid);
     }
 
     public system(partial: string, append: boolean = false): ProxiedAgent {
         if (this.head?.role !== "system") {
-            return this._createNewAgent(this._createMessage(partial, "system"));
+            return this.createNewAgent(this.createMessage(partial, "system"));
         } else {
-            return this._createSiblingMessageAndReturnNewAgent(partial, append);
+            return this.createSiblingMessageAndReturnNewAgent(partial, append);
         }
     }
 
-    private _createMessage(
+    private createMessage(
         content: string,
         role: ChatCompletionRequestMessageRoleEnum,
         parent: string | null = this._head
@@ -139,12 +141,12 @@ export default class Agent {
         return uuid;
     }
 
-    private _createNewAgent(head: string): ProxiedAgent {
+    private createNewAgent(head: string): ProxiedAgent {
         const newConfig: Config = { ...this._config, head };
         return Agent.create(newConfig);
     }
 
-    private _createSiblingMessageAndReturnNewAgent(
+    private createSiblingMessageAndReturnNewAgent(
         partial: string,
         append: boolean
     ): ProxiedAgent {
@@ -155,8 +157,8 @@ export default class Agent {
         const combinedContent = `${first}${
             first.endsWith("\n") || second.startsWith("\n") ? "" : "\n"
         }${second}`;
-        return this._createNewAgent(
-            this._createMessage(combinedContent, "system", this.head!.parent)
+        return this.createNewAgent(
+            this.createMessage(combinedContent, "system", this.head!.parent)
         );
     }
 
@@ -164,7 +166,7 @@ export default class Agent {
         messages: CreateChatCompletionRequest["messages"]
     ): Promise<string> {
         const request: CreateChatCompletionRequest = {
-            ...this._config,
+            ..._.omit(this._config, "head"),
             messages,
         };
         const response: CreateChatCompletionResponse | null =

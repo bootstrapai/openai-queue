@@ -54,7 +54,6 @@ class ModelAPIQueue {
         const now = Date.now();
         const timeElapsed = now - this.lastRefillTime;
         const tokensToAdd = Math.floor((timeElapsed / 60000) * this.tokensPerMinute);
-        console.log("tokensToAdd", tokensToAdd);
         if (tokensToAdd > 0) {
             this.availableTokens = Math.min(this.availableTokens + tokensToAdd, this.tokensPerMinute);
         }
@@ -84,24 +83,46 @@ class ModelAPIQueue {
      */
     callAPI(request) {
         return __awaiter(this, void 0, void 0, function* () {
+            const completion = yield this.openai.createChatCompletion(request);
+            const usedTokens = completion.data.usage.completion_tokens;
+            if (request.max_tokens) {
+                const multiplier = request.n ? request.n : 1;
+                const expectedTokens = request.max_tokens * multiplier;
+                if (expectedTokens > usedTokens) {
+                    this.availableTokens += expectedTokens - usedTokens;
+                }
+            }
+            else {
+                this.availableTokens -= usedTokens;
+            }
+            return completion.data;
+        });
+    }
+    /**
+     * Make a request. This function will wait for enough tokens and requests to be available before making the API call.
+     * If an API call fails, it will wait for enough tokens and requests to be available before retrying.
+     * @param {CreateChatCompletionRequest} request - The request for the API call.
+     * @return {Promise<CreateChatCompletionResponse>} A promise that resolves with the result of the API call.
+     */
+    request(request) {
+        return __awaiter(this, void 0, void 0, function* () {
             const backoffTime = 10000; // Set backoff time to 10 seconds, adjust as needed
             let attemptCount = 0;
             const maxAttempts = 5; // Set max attempts to 5, adjust as needed
+            const tokensNeeded = this.computeTokens(request);
             while (attemptCount < maxAttempts) {
+                while (tokensNeeded > this.availableTokens ||
+                    this.availableRequests <= 0) {
+                    this.refillTokensAndRequests();
+                    const timeToSleep = Math.max(((tokensNeeded - this.availableTokens) /
+                        this.tokensPerMinute) *
+                        60000, (1 / this.requestsPerMinute) * 60000);
+                    yield this.sleep(timeToSleep);
+                }
+                this.availableTokens -= tokensNeeded;
+                this.availableRequests -= 1;
                 try {
-                    const completion = yield this.openai.createChatCompletion(request);
-                    const usedTokens = completion.data.usage.completion_tokens;
-                    if (request.max_tokens) {
-                        const multiplier = request.n ? request.n : 1;
-                        const expectedTokens = request.max_tokens * multiplier;
-                        if (expectedTokens > usedTokens) {
-                            this.availableTokens += expectedTokens - usedTokens;
-                        }
-                    }
-                    else {
-                        this.availableTokens -= usedTokens;
-                    }
-                    return completion.data;
+                    return yield this.callAPI(request);
                 }
                 catch (error) {
                     console.error(`API call failed with error: ${error.message}`);
@@ -117,28 +138,6 @@ class ModelAPIQueue {
                 }
             }
             return null;
-        });
-    }
-    /**
-     * Make a request. This function will wait for enough tokens and requests to be available before making the API call.
-     * @param {CreateChatCompletionRequest} request - The request for the API call.
-     * @return {Promise<CreateChatCompletionResponse>} A promise that resolves with the result of the API call.
-     */
-    request(request) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const tokensNeeded = this.computeTokens(request);
-            console.log("tokensNeeded", tokensNeeded);
-            while (tokensNeeded > this.availableTokens ||
-                this.availableRequests <= 0) {
-                this.refillTokensAndRequests();
-                console.log(tokensNeeded, this.availableTokens);
-                const timeToSleep = Math.max(((tokensNeeded - this.availableTokens) / this.tokensPerMinute) *
-                    60000, (1 / this.requestsPerMinute) * 60000);
-                yield this.sleep(timeToSleep);
-            }
-            this.availableTokens -= tokensNeeded;
-            this.availableRequests -= 1;
-            return yield this.callAPI(request);
         });
     }
 }

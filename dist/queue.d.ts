@@ -45,6 +45,7 @@ export declare class ModelAPIQueue {
     private callAPI;
     /**
      * Make a request. This function will wait for enough tokens and requests to be available before making the API call.
+     * If an API call fails, it will wait for enough tokens and requests to be available before retrying.
      * @param {CreateChatCompletionRequest} request - The request for the API call.
      * @return {Promise<CreateChatCompletionResponse>} A promise that resolves with the result of the API call.
      */

@@ -43,7 +43,6 @@ export class RequestCache {
     }
 
     getCache(request: object): object | null {
-        console.log(this.getRequestHash(request));
         const cacheFilePath = path.join(
             this.cacheDir,
             this.getRequestHash(request)

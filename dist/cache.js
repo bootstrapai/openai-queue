@@ -36,7 +36,6 @@ class RequestCache {
         return crypto.createHash("md5").update(requestString).digest("hex");
     }
     getCache(request) {
-        console.log(this.getRequestHash(request));
         const cacheFilePath = path.join(this.cacheDir, this.getRequestHash(request));
         if (fs.existsSync(cacheFilePath)) {
             const cachedData = JSON.parse(fs.readFileSync(cacheFilePath, "utf-8"));

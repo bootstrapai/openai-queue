@@ -56,3 +56,69 @@ Manages API calls for different models with separate rate limits for each model.
 -   [x] Node.js support
 -   [] browser testing
 -   [] non-chat model support
+
+## OpenAI Agent Class
+
+The `Agent` class in this project is designed as a high-level interface for OpenAI's GPT-4 models. It encapsulates the process of making API requests and managing conversational context.
+
+### Basic Usage
+
+To use the `Agent` class, first import the class:
+
+```javascript
+import Agent from "./agent";
+```
+
+Before you begin, you should manually set a properly configured `APIQueue` on the `Agent` class:
+
+```javascript
+import APIQueue from "./APIQueue";
+
+Agent.api = new APIQueue(/*configuration*/);
+```
+
+Create a new agent using the `create()` static method:
+
+```javascript
+const agent = Agent.create();
+```
+
+This method accepts an optional `config` object. This object can include any properties that an OpenAI `CreateChatCompletionRequest` would accept, minus the `messages` property, and an additional `head` property.
+
+To chat with the agent, simply call the agent as if it were a function:
+
+```javascript
+agent("Hello, agent!").then((newAgent) => {
+    console.log(newAgent.content);
+});
+```
+
+The `agent()` function will make an API request to OpenAI, then return a new agent that has the same config, but a new `head` representing the latest message from the assistant. This new agent can then be used to continue the conversation.
+
+### System Messages
+
+You can also add system messages to the conversation using the `system` method:
+
+```javascript
+const newAgent = agent.system("This is a system message");
+```
+
+If the previous message was a system message, this will append to it instead of creating a new message.
+
+### Extending an Agent
+
+You can create a new agent with additional or changed configuration using the `extend` method:
+
+```javascript
+const newAgent = agent.extend({ temperature: 0.7, max_tokens: 150 });
+```
+
+This new agent will maintain the same conversation `head`, but have a different configuration.
+
+### Other Methods
+
+The `Agent` class also has several getter methods: `head`, `content`, and `messages`. These can be used to access details about the agent and the conversation it is maintaining.
+
+### TypeScript Support
+
+This module is written in TypeScript and includes type definitions for all methods and configurations.

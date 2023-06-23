@@ -1,14 +1,14 @@
 # OpenAI Queue
 
-This library provides an easy way to handle rate limits when using the OpenAI API. It provides a Queue class that rate-limits API calls based on tokens and requests per minute. A higher level ModelAPIQueue class is also provided which allows managing different API models each with their own separate rate limits.
+This library simplifies handling rate limits when using the OpenAI API. It provides the APIQueue class that manages API calls across all models based on tokens and requests per minute. Also, a higher-level ModelAPIQueue class is available for managing different API models each with their distinct rate limits.
 
-It will also automatically retry each request on other errors, with a 10 second delay, 5 attempts per request. The API will often throw errors or disconnects due to being overloaded. Right now we don't inspect the errors and just naively retry. PRs welcome for better error handling.
+The library automatically retries each request on encountering errors, with a 10-second delay, up to 5 attempts per request. Presently, the library naively retries all errors, but contributions are welcome for more sophisticated error handling.
 
-This code _should_ work in the browser, but the nested tiktoken dependency uses wasm and we haven't instrumented building the tests for the browser yet. PRs welcome.
+While the code _should_ function in a browser environment, due to the nested tiktoken dependency which uses wasm, we haven't added support for browser testing yet. Contributions for this are also welcome.
 
 ## Usage
 
-You first need to construct a `ModelAPIQueue` object. If you want to override the default rate limits, you can pass a `customModelConfigs` object to the constructor.
+To use the library, create an `APIQueue` instance. To override the default rate limits, a `customModelConfigs` object can be passed to the constructor.
 
 ```typescript
 const customModelConfigs = {
@@ -18,10 +18,10 @@ const customModelConfigs = {
     },
 };
 
-const modelAPIQueue = new ModelAPIQueue("your-api-key", customModelConfigs);
+const APIQueue = new APIQueue("your-api-key", customModelConfigs);
 ```
 
-Then, you can make API calls using the request() method of the ModelAPIQueue object. The request() method automatically dispatches the API call to the appropriate queue based on the model string of the request. The request object format is the same as in the [openai](https://github.com/openai/openai-node) library
+Then, make API calls using the request() method of the APIQueue object. The request() method dispatches the API call to the appropriate queue based on the model string of the request. The request object format matches that in the [openai](https://github.com/openai/openai-node) library.
 
 ```typescript
 const request = {
@@ -29,52 +29,46 @@ const request = {
     // Other parameters...
 };
 
-const response = await modelAPIQueue.request(request);
+const response = await APIQueue.request(request);
 ```
 
-## Supported models and Default Rate Limits
+## Supported Models and Default Rate Limits
 
-The library has default rate limits for the following models:
+The library provides default rate limits for the following models:
 
-gpt-3.5-turbo: 3500 requests per minute and 90000 tokens per minute
-gpt-3.5-turbo-0301: 3500 requests per minute and 90000 tokens per minute
-gpt-4: 200 requests per minute and 40000 tokens per minute
-gpt-4-0314: 200 requests per minute and 40000 tokens per minute
+-   gpt-3.5-turbo: 3500 requests per minute and 90000 tokens per minute
+-   gpt-3.5-turbo-0301: 3500 requests per minute and 90000 tokens per minute
+-   gpt-4: 200 requests per minute and 40000 tokens per minute
+-   gpt-4-0314: 200 requests per minute and 40000 tokens per minute
 
 ## Classes
 
-### APIQueue
-
-Manages rate-limited API calls for a single model. It takes a `tokensPerMinute`, `requestsPerMinute`, `model`, and `apiKey` as parameters during construction. API calls are made using the `request()` method.
-
 ### ModelAPIQueue
 
-Manages API calls for different models with separate rate limits for each model. It creates an internal `APIQueue` for each model. API calls are made using the `request()` method, which dispatches the API call to the appropriate queue based on the model string of the request.
+Handles rate-limited API calls for a single model. It requires `tokensPerMinute`, `requestsPerMinute`, `model`, and `apiKey` parameters during construction. API calls are made using the `request()` method.
 
-## Roadmap
+### APIQueue
 
--   [x] Node.js support
--   [] browser testing
--   [] non-chat model support
+Manages API calls across different models, each with its unique rate limits. It internally creates a `ModelAPIQueue` instance for each model. API calls are made using the `request()` method, which dispatches the API call to the correct queue based on the request's model string.
 
 ## OpenAI Agent Class
 
-The `Agent` class in this project is designed as a high-level interface for OpenAI's GPT-4 models. It encapsulates the process of making API requests and managing conversational context.
+The `Agent` class provides a high-level interface to OpenAI's GPT-4 models, wrapping the process of making API requests and managing conversational context.
 
 ### Basic Usage
 
-To use the `Agent` class, first import the class:
+Import the `Agent` class:
 
 ```javascript
 import Agent from "./agent";
 ```
 
-Before you begin, you should manually set a properly configured `APIQueue` on the `Agent` class:
+Manually set a properly configured `ModelAPIQueue` on the `Agent` class:
 
 ```javascript
-import APIQueue from "./APIQueue";
+import ModelAPIQueue from "./ModelAPIQueue";
 
-Agent.api = new APIQueue(/*configuration*/);
+Agent.api = new ModelAPIQueue(/*configuration*/);
 ```
 
 Create a new agent using the `create()` static method:
@@ -83,9 +77,9 @@ Create a new agent using the `create()` static method:
 const agent = Agent.create();
 ```
 
-This method accepts an optional `config` object. This object can include any properties that an OpenAI `CreateChatCompletionRequest` would accept, minus the `messages` property, and an additional `head` property.
+This method takes an optional `config` object, which can include any properties that an OpenAI `CreateChatCompletionRequest` would accept, excluding the `messages` property, and an extra `head` property.
 
-To chat with the agent, simply call the agent as if it were a function:
+To interact with the agent, call the agent as a function:
 
 ```javascript
 agent("Hello, agent!").then((newAgent) => {
@@ -93,32 +87,21 @@ agent("Hello, agent!").then((newAgent) => {
 });
 ```
 
-The `agent()` function will make an API request to OpenAI, then return a new agent that has the same config, but a new `head` representing the latest message from the assistant. This new agent can then be used to continue the conversation.
+The `agent()` function makes an API request to OpenAI, then returns a new agent with the same config but an updated `head` representing the assistant's latest message. You can use this new agent to continue the conversation.
 
-### System Messages
+### Additional Agent Features
 
-You can also add system messages to the conversation using the `system` method:
-
-```javascript
-const newAgent = agent.system("This is a system message");
-```
-
-If the previous message was a system message, this will append to it instead of creating a new message.
-
-### Extending an Agent
-
-You can create a new agent with additional or changed configuration using the `extend` method:
-
-```javascript
-const newAgent = agent.extend({ temperature: 0.7, max_tokens: 150 });
-```
-
-This new agent will maintain the same conversation `head`, but have a different configuration.
-
-### Other Methods
-
-The `Agent` class also has several getter methods: `head`, `content`, and `messages`. These can be used to access details about the agent and the conversation it is maintaining.
-
-### TypeScript Support
+-   **System Messages**: Add system messages to the conversation using the `system` method. If the previous message was a system message, this will append to it instead of creating a new message.
+-   **Extending an Agent**: Create a new agent with extra or changed configuration using the `extend` method. This new agent will maintain the same conversation `head`, but with a different configuration.
+-   **Other Methods**: The `Agent` class includes several getter methods: `head`, `content`, and `messages` to access details about the agent and the conversation it maintains.
+    -   `head`: the full message object of the head.
+    -   `content`: the content string of the head message.
+    -   `messages`: the complete message history of the Agent.
 
 This module is written in TypeScript and includes type definitions for all methods and configurations.
+
+## Roadmap
+
+-   [x] Node.js support
+-   [ ] Browser testing
+-   [ ] Non-chat model support

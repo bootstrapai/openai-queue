@@ -111,9 +111,11 @@ export default class Agent {
     }
 
     public async chat(content: string): Promise<ProxiedAgent> {
+        const stashedHead = this._head;
         const uuid: string = this.createMessage(content, "user");
         this._head = uuid;
         const apiResponse: string = await this.callApi(this.messages);
+        this._head = stashedHead;
         const assistantUuid: string = this.createMessage(
             apiResponse,
             "assistant",

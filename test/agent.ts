@@ -77,6 +77,23 @@ describe("Agent Class", function () {
                 apiResponse.choices[0].message!.content
             );
         });
+
+        it("should allow branching", async function () {
+            const agent = await Agent.create().chat("first post");
+
+            // @ts-ignore
+            const head = agent._head;
+            const newAgent1 = await agent("Hello, Agent 1!");
+            const newAgent2 = await agent("Hello, Agent 2!");
+
+            // Original agent's head should remain the same
+            // @ts-ignore
+            expect(agent._head).to.equal(head);
+
+            // The new agents should have different heads
+            // @ts-ignore
+            expect(newAgent1._head).to.not.equal(newAgent2._head);
+        });
     });
 
     describe("System Message", function () {

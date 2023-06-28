@@ -75,9 +75,11 @@ class Agent {
     }
     chat(content) {
         return __awaiter(this, void 0, void 0, function* () {
+            const stashedHead = this._head;
             const uuid = this.createMessage(content, "user");
             this._head = uuid;
             const apiResponse = yield this.callApi(this.messages);
+            this._head = stashedHead;
             const assistantUuid = this.createMessage(apiResponse, "assistant", uuid);
             return this.createNewAgent(assistantUuid);
         });

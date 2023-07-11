@@ -111,16 +111,14 @@ describe("Agent Class", function () {
             expect(newAgent.content).to.equal("This is a system message.");
         });
 
-        it("should append system message", function () {
+        it("should create a new system message rather than appending", function () {
             const agent = Agent.create();
-            const newAgent = agent.system("append message", true);
+            const newAgent = agent.system("initial message");
             // @ts-ignore
-            expect(newAgent.content).to.equal("append message");
-            const appendedAgent = newAgent.system("appended again", true);
+            expect(newAgent.content).to.equal("initial message");
+            const separateAgent = newAgent.system("separate message");
             // @ts-ignore
-            expect(appendedAgent.content).to.equal(
-                "append message\nappended again"
-            );
+            expect(separateAgent.content).to.equal("separate message");
         });
     });
 
@@ -143,6 +141,54 @@ describe("Agent Class", function () {
             expect(newAgent._config.temperature).to.equal(config.temperature);
             // @ts-ignore
             expect(newAgent._config.max_tokens).to.equal(config.max_tokens);
+        });
+    });
+
+    describe("Retry Behavior", function () {
+        it("should be able to retry and increment callId", async function () {
+            const agent = Agent.create();
+            const newAgent = await agent("Hello, Agent!"); // Ensuring agent call is awaited
+            const retryAgent = await newAgent.retry(); // Retry on newAgent
+            // @ts-ignore
+            expect(retryAgent.callId).to.equal(newAgent.callId + 1);
+            // @ts-ignore
+            expect(retryAgent.messages[0].content).to.include(
+                // @ts-ignore
+                retryAgent.callId.toString().padStart(2, "0")
+            );
+        });
+
+        it("should retry with last user message", async function () {
+            const agent = Agent.create();
+            const userMsg = "Hello, Agent!";
+            const newAgent = await agent(userMsg); // Ensuring agent call is awaited
+            const retryAgent = await newAgent.retry(); // Retry on newAgent
+            // @ts-ignore
+            expect(retryAgent.messages[0].content).to.include(userMsg);
+        });
+
+        it("should throw an error if no user message found for retry", async function () {
+            const agent = Agent.create();
+            agent.system("System message.");
+            try {
+                await agent.retry();
+            } catch (error) {
+                expect(error.message).to.equal(
+                    "No user message found for retry"
+                );
+            }
+        });
+    });
+
+    describe("Chatting with the Agent with callId", function () {
+        it("should include callId in user message content", async function () {
+            const agent = Agent.create();
+            const newAgent = await agent("Hello, Agent!");
+            // @ts-ignore
+            expect(newAgent.messages[0].content).to.include(
+                // @ts-ignore
+                agent.callId.toString().padStart(2, "0")
+            );
         });
     });
 });

@@ -16,6 +16,7 @@ interface Message {
 
 export interface Config extends Omit<CreateChatCompletionRequest, "messages"> {
     head?: string | null;
+    callId?: number;
 }
 
 type ProxiedFunction = (content: string) => Promise<ProxiedAgent>;
@@ -23,13 +24,18 @@ type ProxiedAgent = ProxiedFunction & InstanceType<typeof Agent>;
 
 export default class Agent {
     static api: APIQueue;
+    public cost: number;
     private static _dag: Map<string, Message> = new Map();
 
     private _head: string | null;
     private _config: Config;
+    private callId: number;
 
-    public static create(config: Config = { model: "gpt-4" }): ProxiedAgent {
-        const instance = new Agent(config);
+    public static create(
+        config: Config = { model: "gpt-4", callId: 0 },
+        cost: number = 0
+    ): ProxiedAgent {
+        const instance = new Agent(config, cost);
         const func: ProxiedFunction = async (
             content: string
         ): Promise<ProxiedAgent> => await instance.chat(content);
@@ -75,9 +81,11 @@ export default class Agent {
         }) as ProxiedAgent;
     }
 
-    constructor(config: Config) {
+    constructor(config: Config, cost: number) {
         this._head = config.head || null;
         this._config = config;
+        this.cost = cost;
+        this.callId = config.callId || 0;
     }
 
     get head(): Message | undefined {
@@ -114,22 +122,43 @@ export default class Agent {
         const stashedHead = this._head;
         const uuid: string = this.createMessage(content, "user");
         this._head = uuid;
-        const apiResponse: string = await this.callApi(this.messages);
+        const { content: apiResponse, cost } = await this.callApi(
+            this.messages
+        );
         this._head = stashedHead;
         const assistantUuid: string = this.createMessage(
             apiResponse,
             "assistant",
             uuid
         );
-        return this.createNewAgent(assistantUuid);
+        return this.createNewAgent(assistantUuid, cost);
     }
 
-    public system(partial: string, append: boolean = false): ProxiedAgent {
-        if (this.head?.role !== "system") {
-            return this.createNewAgent(this.createMessage(partial, "system"));
-        } else {
-            return this.createSiblingMessageAndReturnNewAgent(partial, append);
+    public async retry(): Promise<ProxiedAgent> {
+        let lastUserMessage: Message | undefined = this.head;
+        while (lastUserMessage?.role !== "user") {
+            if (!lastUserMessage?.parent)
+                throw new Error("No user message found for retry");
+            lastUserMessage = Agent._dag.get(lastUserMessage.parent);
         }
+        // Create a new agent that's based on the parent of the last user message
+        const newAgentConfig: Config = {
+            ...this._config,
+            head: lastUserMessage.parent,
+            callId: this.callId + 1,
+        };
+        const newAgent = Agent.create(newAgentConfig, this.cost);
+        // Then call chat on the new agent with the same message as before
+        return newAgent.chat(
+            lastUserMessage.content.split(" ").slice(1).join(" ")
+        );
+    }
+
+    public system(partial: string): ProxiedAgent {
+        return this.createNewAgent(
+            this.createMessage(partial, "system"),
+            this.cost
+        );
     }
 
     private createMessage(
@@ -138,35 +167,26 @@ export default class Agent {
         parent: string | null = this._head
     ): string {
         const uuid = uuidv4();
+        if (role === "user") {
+            content = `${this.callId.toString().padStart(2, "0")} ${content}`;
+        }
         const message: Message = { content, role, uuid, parent };
         Agent._dag.set(uuid, message);
         return uuid;
     }
 
-    private createNewAgent(head: string): ProxiedAgent {
-        const newConfig: Config = { ...this._config, head };
-        return Agent.create(newConfig);
-    }
-
-    private createSiblingMessageAndReturnNewAgent(
-        partial: string,
-        append: boolean
-    ): ProxiedAgent {
-        const { content: existingMessage } = this.head!;
-        const [first, second] = append
-            ? [existingMessage, partial]
-            : [partial, existingMessage];
-        const combinedContent = `${first}${
-            first.endsWith("\n") || second.startsWith("\n") ? "" : "\n"
-        }${second}`;
-        return this.createNewAgent(
-            this.createMessage(combinedContent, "system", this.head!.parent)
-        );
+    private createNewAgent(head: string, cost: number): ProxiedAgent {
+        const newConfig: Config = {
+            ...this._config,
+            head,
+            callId: this.callId,
+        };
+        return Agent.create(newConfig, cost);
     }
 
     private async callApi(
         messages: CreateChatCompletionRequest["messages"]
-    ): Promise<string> {
+    ): Promise<{ content: string; cost: number }> {
         const request: CreateChatCompletionRequest = {
             ..._.omit(this._config, "head"),
             messages,
@@ -177,6 +197,12 @@ export default class Agent {
         if (!response) {
             throw new Error("unable to get api response");
         }
-        return response!.choices[0]!.message!.content;
+        const content = response!.choices[0]!.message!.content;
+        const cost =
+            (this.cost as number) +
+            response.usage?.prompt_tokens! +
+            response.usage?.completion_tokens! * 2;
+
+        return { content, cost };
     }
 }

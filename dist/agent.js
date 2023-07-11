@@ -12,8 +12,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const uuid_1 = require("uuid");
 const _ = require("lodash");
 class Agent {
-    static create(config = { model: "gpt-4" }) {
-        const instance = new Agent(config);
+    static create(config = { model: "gpt-4", callId: 0 }, cost = 0) {
+        const instance = new Agent(config, cost);
         const func = (content) => __awaiter(this, void 0, void 0, function* () { return yield instance.chat(content); });
         return new Proxy(func, {
             get: (target, prop, receiver) => {
@@ -49,9 +49,11 @@ class Agent {
             },
         });
     }
-    constructor(config) {
+    constructor(config, cost) {
         this._head = config.head || null;
         this._config = config;
+        this.cost = cost;
+        this.callId = config.callId || 0;
     }
     get head() {
         return Agent._dag.get(this._head);
@@ -78,47 +80,56 @@ class Agent {
             const stashedHead = this._head;
             const uuid = this.createMessage(content, "user");
             this._head = uuid;
-            const apiResponse = yield this.callApi(this.messages);
+            const { content: apiResponse, cost } = yield this.callApi(this.messages);
             this._head = stashedHead;
             const assistantUuid = this.createMessage(apiResponse, "assistant", uuid);
-            return this.createNewAgent(assistantUuid);
+            return this.createNewAgent(assistantUuid, cost);
         });
     }
-    system(partial, append = false) {
-        var _a;
-        if (((_a = this.head) === null || _a === void 0 ? void 0 : _a.role) !== "system") {
-            return this.createNewAgent(this.createMessage(partial, "system"));
-        }
-        else {
-            return this.createSiblingMessageAndReturnNewAgent(partial, append);
-        }
+    retry() {
+        return __awaiter(this, void 0, void 0, function* () {
+            let lastUserMessage = this.head;
+            while ((lastUserMessage === null || lastUserMessage === void 0 ? void 0 : lastUserMessage.role) !== "user") {
+                if (!(lastUserMessage === null || lastUserMessage === void 0 ? void 0 : lastUserMessage.parent))
+                    throw new Error("No user message found for retry");
+                lastUserMessage = Agent._dag.get(lastUserMessage.parent);
+            }
+            // Create a new agent that's based on the parent of the last user message
+            const newAgentConfig = Object.assign(Object.assign({}, this._config), { head: lastUserMessage.parent, callId: this.callId + 1 });
+            const newAgent = Agent.create(newAgentConfig, this.cost);
+            // Then call chat on the new agent with the same message as before
+            return newAgent.chat(lastUserMessage.content.split(" ").slice(1).join(" "));
+        });
+    }
+    system(partial) {
+        return this.createNewAgent(this.createMessage(partial, "system"), this.cost);
     }
     createMessage(content, role, parent = this._head) {
         const uuid = (0, uuid_1.v4)();
+        if (role === "user") {
+            content = `${this.callId.toString().padStart(2, "0")} ${content}`;
+        }
         const message = { content, role, uuid, parent };
         Agent._dag.set(uuid, message);
         return uuid;
     }
-    createNewAgent(head) {
-        const newConfig = Object.assign(Object.assign({}, this._config), { head });
-        return Agent.create(newConfig);
-    }
-    createSiblingMessageAndReturnNewAgent(partial, append) {
-        const { content: existingMessage } = this.head;
-        const [first, second] = append
-            ? [existingMessage, partial]
-            : [partial, existingMessage];
-        const combinedContent = `${first}${first.endsWith("\n") || second.startsWith("\n") ? "" : "\n"}${second}`;
-        return this.createNewAgent(this.createMessage(combinedContent, "system", this.head.parent));
+    createNewAgent(head, cost) {
+        const newConfig = Object.assign(Object.assign({}, this._config), { head, callId: this.callId });
+        return Agent.create(newConfig, cost);
     }
     callApi(messages) {
+        var _a, _b;
         return __awaiter(this, void 0, void 0, function* () {
             const request = Object.assign(Object.assign({}, _.omit(this._config, "head")), { messages });
             const response = yield Agent.api.request(request);
             if (!response) {
                 throw new Error("unable to get api response");
             }
-            return response.choices[0].message.content;
+            const content = response.choices[0].message.content;
+            const cost = this.cost +
+                ((_a = response.usage) === null || _a === void 0 ? void 0 : _a.prompt_tokens) +
+                ((_b = response.usage) === null || _b === void 0 ? void 0 : _b.completion_tokens) * 2;
+            return { content, cost };
         });
     }
 }
